@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Тег релиза (например, v1.0.0)"
+        description: "Тег релиза (например, v1.0.1)"
         required: false
-        default: "v1.0.0"
+        default: "v1.0.1"
 
 permissions:
   contents: write
@@ -76,7 +76,7 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           else
-            TAG="v1.0.0"
+            TAG="v1.0.1"
           fi
           APK_NAME="KinoPulse-${TAG}.apk"
           mkdir -p release-artifacts
