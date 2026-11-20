@@ -9,6 +9,7 @@ import com.example.data.local.KinoPulseDao
 import com.example.data.local.KinoPulseDatabase
 import com.example.data.local.MovieEntity
 import com.example.data.local.NotificationItemEntity
+import com.example.data.network.ArchiveOrgMovieService
 import com.example.data.network.NetworkMonitor
 import com.example.data.prefs.UserPreferences
 import com.example.data.prefs.UserPreferencesRepository
@@ -25,7 +26,8 @@ class KinoPulseRepository(
     private val dao: KinoPulseDao,
     val prefsRepo: UserPreferencesRepository,
     val cacheManager: OfflineCacheManager,
-    val networkMonitor: NetworkMonitor
+    val networkMonitor: NetworkMonitor,
+    private val archiveService: ArchiveOrgMovieService
 ) {
     val allMovies: Flow<List<MovieEntity>> = dao.observeAllMovies()
     val favorites: Flow<List<MovieEntity>> = dao.observeFavorites()
@@ -36,12 +38,61 @@ class KinoPulseRepository(
     val isDeviceOnline: StateFlow<Boolean> = networkMonitor.isOnline
     val downloadProgress: StateFlow<Map<String, Float>> = cacheManager.downloadProgress
 
+    private var archivePage = 1
+
     suspend fun initialize() {
         KinoPulseDatabase.seedIfEmpty(dao)
         prefsRepo.ensureDeviceId()
         NewReleaseNotificationHelper.ensureChannel(context)
         val prefs = prefsRepo.preferencesFlow.first()
         NewReleaseNotificationHelper.schedulePeriodicChecks(context, prefs.notificationsEnabled)
+    }
+
+    suspend fun syncOnlineCatalog(nextPage: Boolean = false): Result<Int> {
+        val prefs = prefsRepo.preferencesFlow.first()
+        if (prefs.offlineModeEnabled || !isDeviceOnline.value) {
+            return Result.failure(IllegalStateException("Офлайн-режим: подключение к сети недоступно"))
+        }
+        val pageToFetch = if (nextPage) archivePage + 1 else 1
+        val result = archiveService.fetchPopularFeatureFilms(page = pageToFetch, rows = 16)
+        return result.map { fetched ->
+            if (fetched.isNotEmpty()) {
+                val beforeCount = dao.getMoviesCount()
+                dao.insertMoviesIfAbsent(fetched)
+                val afterCount = dao.getMoviesCount()
+                if (nextPage) archivePage = pageToFetch
+                (afterCount - beforeCount).coerceAtLeast(0)
+            } else {
+                0
+            }
+        }
+    }
+
+    suspend fun searchArchiveOnline(query: String): Result<Int> {
+        val prefs = prefsRepo.preferencesFlow.first()
+        if (prefs.offlineModeEnabled || !isDeviceOnline.value) {
+            return Result.failure(IllegalStateException("Офлайн-режим: онлайн-поиск недоступен"))
+        }
+        val result = archiveService.searchArchiveMovies(query = query, rows = 14)
+        return result.map { fetched ->
+            if (fetched.isNotEmpty()) {
+                val before = dao.getMoviesCount()
+                dao.insertMoviesIfAbsent(fetched)
+                (dao.getMoviesCount() - before).coerceAtLeast(0)
+            } else {
+                0
+            }
+        }
+    }
+
+    suspend fun resolvePlayableVideoUrl(movie: MovieEntity): String? {
+        if (movie.videoUrl.isNotBlank()) return movie.videoUrl
+        if (movie.archiveId.isBlank()) return null
+        val resolved = archiveService.resolveDirectMp4Url(movie.archiveId)
+        if (!resolved.isNullOrBlank()) {
+            dao.updateResolvedVideoUrl(movie.id, resolved)
+        }
+        return resolved
     }
 
     fun observeMovie(movieId: String): Flow<MovieEntity?> = dao.observeMovieById(movieId)
@@ -62,7 +113,9 @@ class KinoPulseRepository(
     }
 
     suspend fun downloadMovie(movie: MovieEntity): DownloadResult {
-        val result = cacheManager.downloadMovieForOffline(movie.id, movie.videoUrl)
+        val resolvedUrl = resolvePlayableVideoUrl(movie)
+            ?: return DownloadResult.Error("Не удалось получить ссылку на MP4-поток. Проверьте сеть.")
+        val result = cacheManager.downloadMovieForOffline(movie.id, resolvedUrl)
         if (result is DownloadResult.Success) {
             dao.updateDownloadStatus(
                 movieId = movie.id,
@@ -122,10 +175,10 @@ class KinoPulseRepository(
     }
 
     suspend fun triggerNewReleaseAlert(movie: MovieEntity? = null) {
-        val target = movie ?: dao.getAllMoviesOnce().filter { it.isNewRelease }.randomOrNull()
+        val target = movie ?: dao.getAllMoviesOnce().filter { it.isFeatured || it.isNewRelease }.randomOrNull()
             ?: dao.getAllMoviesOnce().firstOrNull() ?: return
-        val title = "Новинка в KinoPulse: «${target.title}»"
-        val body = "${target.releaseYear} · ${target.genres.joinToString(", ")} · ★ ${target.rating}. Откройте, чтобы посмотреть или скачать в офлайн."
+        val title = "Рекомендация KinoPulse: «${target.title}»"
+        val body = "${target.releaseYear} · ${target.genres.joinToString(", ")} · ★ ${target.rating}. Доступно для просмотра и загрузки в офлайн."
         val notif = NotificationItemEntity(
             id = "notif_${UUID.randomUUID()}",
             title = title,

@@ -8,7 +8,10 @@ import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,29 +24,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Sync
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,11 +39,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.prefs.CardLayoutMode
 import com.example.notifications.NewReleaseNotificationHelper
 import com.example.ui.MainUiState
+import com.example.ui.components.MinimalPanel
+import com.example.ui.components.MinimalPrimaryButton
+import com.example.ui.components.MinimalSecondaryButton
+import com.example.ui.components.MinimalSegmentedBar
+import com.example.ui.components.MinimalSwitchRow
+import com.example.ui.icons.LucideIcons
+import com.example.ui.theme.LocalKinoPalette
 import com.example.ui.theme.ThemeMode
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -68,18 +66,26 @@ fun SettingsScreen(
     uiState: MainUiState,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetAmoledNight: (Boolean) -> Unit,
+    onSetCardLayoutMode: (CardLayoutMode) -> Unit,
+    onSetShowRatingOnCards: (Boolean) -> Unit,
+    onSetShowMetaOnCards: (Boolean) -> Unit,
+    onSetShowGenresOnCards: (Boolean) -> Unit,
     onSetOfflineMode: (Boolean) -> Unit,
     onSetNotificationsEnabled: (Boolean) -> Unit,
     onTriggerNotification: () -> Unit,
+    onSyncMoreOnline: () -> Unit,
     onClearVolatileCache: () -> Unit,
     onSaveDisplayName: (String) -> Unit,
     onExportSyncCode: ((String) -> Unit) -> Unit,
     onImportSyncCode: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalKinoPalette.current
     val context = LocalContext.current
-    var nameInput by remember(uiState.preferences.userDisplayName) {
-        mutableStateOf(uiState.preferences.userDisplayName)
+    val prefs = uiState.preferences
+
+    var nameInput by remember(prefs.userDisplayName) {
+        mutableStateOf(prefs.userDisplayName)
     }
     var showImportDialog by remember { mutableStateOf(false) }
     var importCodeInput by remember { mutableStateOf("") }
@@ -95,262 +101,260 @@ fun SettingsScreen(
     }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .background(palette.background),
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Profile Card
+        // Profile
         item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-            ) {
+            MinimalPanel(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Column {
-                            Text("Профиль зрителя", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                text = "ID устройства: ${uiState.preferences.deviceId}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = nameInput,
-                            onValueChange = { nameInput = it },
-                            label = { Text("Имя в киноклубе") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                        Button(onClick = { onSaveDisplayName(nameInput) }) {
-                            Text("Сохранить")
-                        }
-                    }
-                }
-            }
-        }
-
-        // Night Mode Card
-        item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.DarkMode,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text("Ночной режим и оформление", style = MaterialTheme.typography.titleMedium)
-                    }
-
-                    val modes = listOf(
-                        ThemeMode.NIGHT to "Ночной",
-                        ThemeMode.DAY to "Дневной",
-                        ThemeMode.SYSTEM to "Авто"
+                    SettingsSectionTitle(
+                        icon = LucideIcons.User,
+                        title = "Профиль",
+                        subtitle = "Устройство: ${prefs.deviceId}"
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        modes.forEachIndexed { index, (mode, label) ->
-                            SegmentedButton(
-                                selected = uiState.preferences.themeMode == mode,
-                                onClick = { onSetThemeMode(mode) },
-                                shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                                modifier = Modifier.testTag("theme_mode_${mode.name}")
-                            ) {
-                                Text(label)
-                            }
-                        }
-                    }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("AMOLED глубокий чёрный", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                text = "Снижает нагрузку на глаза при просмотре ночью",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = uiState.preferences.amoledNightMode,
-                            onCheckedChange = onSetAmoledNight
-                        )
-                    }
-                }
-            }
-        }
-
-        // Offline Mode & High-Speed Caching
-        item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.CloudOff,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
-                        Text("Офлайн-режим и кеширование", style = MaterialTheme.typography.titleMedium)
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Автономный офлайн-режим", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                text = if (uiState.isDeviceOnline) "Сеть доступна · Работает быстрый кеш"
-                                else "Сеть отсутствует · Используется локальный кеш",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = uiState.preferences.offlineModeEnabled,
-                            onCheckedChange = onSetOfflineMode,
-                            modifier = Modifier.testTag("offline_mode_switch")
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow
-                    ) {
-                        Column(
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                .weight(1f)
+                                .clip(RoundedCornerShape(13.dp))
+                                .background(palette.surfaceElevated)
+                                .border(1.dp, palette.borderSubtle, RoundedCornerShape(13.dp))
+                                .padding(horizontal = 14.dp, vertical = 13.dp)
                         ) {
-                            Text(
-                                text = "Загруженные фильмы: ${uiState.cacheStats.offlineVideosCount} (${String.format("%.1f", uiState.cacheStats.offlineVideosSizeMb)} МБ)",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "Кеш постеров и сети: ${String.format("%.2f", uiState.cacheStats.imageCacheSizeMb + uiState.cacheStats.httpCacheSizeMb)} МБ",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            if (nameInput.isEmpty()) {
+                                Text(
+                                    text = "Имя в киноклубе",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = palette.textTertiary
+                                )
+                            }
+                            BasicTextField(
+                                value = nameInput,
+                                onValueChange = { nameInput = it },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = palette.textPrimary),
+                                cursorBrush = SolidColor(palette.accent),
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
-                    }
-
-                    OutlinedButton(
-                        onClick = onClearVolatileCache,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.DeleteSweep,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                        MinimalPrimaryButton(
+                            text = "Сохранить",
+                            onClick = { onSaveDisplayName(nameInput) }
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Очистить временный кеш (офлайн-фильмы сохранятся)")
                     }
                 }
             }
         }
 
-        // New Releases Notifications
+        // Theme & Night Mode
         item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-            ) {
+            MinimalPanel(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    SettingsSectionTitle(
+                        icon = LucideIcons.Moon,
+                        title = "Оформление",
+                        subtitle = "Минималистичная палитра без Material You"
+                    )
+
+                    val themeModes = listOf(ThemeMode.NIGHT, ThemeMode.DAY, ThemeMode.SYSTEM)
+                    val themeLabels = listOf("Ночной", "Дневной", "Авто")
+                    MinimalSegmentedBar(
+                        options = themeLabels,
+                        selectedIndex = themeModes.indexOf(prefs.themeMode).coerceAtLeast(0),
+                        onSelect = { idx -> onSetThemeMode(themeModes[idx]) },
+                        modifier = Modifier.testTag("theme_mode_selector")
+                    )
+
+                    MinimalSwitchRow(
+                        title = "AMOLED чистый чёрный",
+                        subtitle = "Глубокий #000000 фон для комфортного просмотра ночью",
+                        checked = prefs.amoledNightMode,
+                        onCheckedChange = onSetAmoledNight
+                    )
+                }
+            }
+        }
+
+        // Card Display Settings
+        item {
+            MinimalPanel(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SettingsSectionTitle(
+                        icon = LucideIcons.LayoutGrid,
+                        title = "Отображение карточек",
+                        subtitle = "Настройте плотность сетки и подписи в каталоге"
+                    )
+
+                    val layouts = listOf(CardLayoutMode.GRID_2, CardLayoutMode.GRID_3, CardLayoutMode.LIST)
+                    MinimalSegmentedBar(
+                        options = listOf("2 в ряд", "3 в ряд", "Список"),
+                        selectedIndex = layouts.indexOf(prefs.cardLayoutMode).coerceAtLeast(0),
+                        onSelect = { idx -> onSetCardLayoutMode(layouts[idx]) }
+                    )
+
+                    HorizontalDivider(color = palette.borderSubtle)
+
+                    MinimalSwitchRow(
+                        title = "Показывать рейтинг",
+                        subtitle = "Оценка зрителей в углу постера",
+                        checked = prefs.showRatingOnCards,
+                        onCheckedChange = onSetShowRatingOnCards
+                    )
+                    MinimalSwitchRow(
+                        title = "Год и длительность",
+                        subtitle = "Краткие метаданные под названием",
+                        checked = prefs.showMetaOnCards,
+                        onCheckedChange = onSetShowMetaOnCards
+                    )
+                    MinimalSwitchRow(
+                        title = "Жанры на карточке",
+                        subtitle = "Категории фильма в каталоге и списке",
+                        checked = prefs.showGenresOnCards,
+                        onCheckedChange = onSetShowGenresOnCards
+                    )
+                }
+            }
+        }
+
+        // Real Catalog & Offline Cache
+        item {
+            MinimalPanel(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SettingsSectionTitle(
+                        icon = LucideIcons.WifiOff,
+                        title = "Каталог и офлайн-кеш",
+                        subtitle = "В базе: ${uiState.allMovies.size} фильмов · ${if (uiState.isDeviceOnline) "Сеть доступна" else "Нет сети"}"
+                    )
+
+                    MinimalSwitchRow(
+                        title = "Автономный офлайн-режим",
+                        subtitle = "Воспроизводить только скачанные копии и локальный кеш",
+                        checked = prefs.offlineModeEnabled,
+                        onCheckedChange = onSetOfflineMode,
+                        modifier = Modifier.testTag("offline_mode_switch")
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(palette.surfaceElevated)
+                            .border(1.dp, palette.borderSubtle, RoundedCornerShape(13.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.NotificationsActive,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary
+                        Text(
+                            text = "Офлайн-фильмы: ${uiState.cacheStats.offlineVideosCount} (${String.format("%.1f", uiState.cacheStats.offlineVideosSizeMb)} МБ)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.textPrimary
                         )
-                        Text("Уведомления о новинках", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "Кеш постеров и сети: ${String.format("%.2f", uiState.cacheStats.imageCacheSizeMb + uiState.cacheStats.httpCacheSizeMb)} МБ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.textSecondary
+                        )
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Оповещать о премьерах", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                text = "Фоновая проверка новых релизов каждые 12 часов",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (uiState.isSyncingOnline) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(palette.surfaceElevated),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = palette.accent
+                                )
+                            }
+                        } else {
+                            MinimalPrimaryButton(
+                                text = "Пополнить каталог",
+                                icon = LucideIcons.Globe,
+                                onClick = onSyncMoreOnline,
+                                enabled = !uiState.effectiveOfflineMode,
+                                modifier = Modifier.weight(1f)
                             )
                         }
-                        Switch(
-                            checked = uiState.preferences.notificationsEnabled,
-                            onCheckedChange = { enabled ->
-                                if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                    !NewReleaseNotificationHelper.hasNotificationPermission(context)
-                                ) {
-                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                } else {
-                                    onSetNotificationsEnabled(enabled)
-                                }
-                            },
-                            modifier = Modifier.testTag("notifications_switch")
+                        MinimalSecondaryButton(
+                            text = "Кеш",
+                            icon = LucideIcons.Trash,
+                            onClick = onClearVolatileCache
                         )
                     }
+                }
+            }
+        }
 
-                    Button(
+        // Notifications
+        item {
+            MinimalPanel(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SettingsSectionTitle(
+                        icon = LucideIcons.Bell,
+                        title = "Уведомления о новинках",
+                        subtitle = "Фоновая проверка новых релизов каждые 12 часов"
+                    )
+
+                    MinimalSwitchRow(
+                        title = "Оповещать о премьерах",
+                        checked = prefs.notificationsEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                !NewReleaseNotificationHelper.hasNotificationPermission(context)
+                            ) {
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                onSetNotificationsEnabled(enabled)
+                            }
+                        },
+                        modifier = Modifier.testTag("notifications_switch")
+                    )
+
+                    MinimalSecondaryButton(
+                        text = "Проверить новинки сейчас",
+                        icon = LucideIcons.Sparkles,
                         onClick = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                                 !NewReleaseNotificationHelper.hasNotificationPermission(context)
@@ -362,52 +366,34 @@ fun SettingsScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("trigger_notification_button"),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("Проверить новинки и отправить уведомление")
-                    }
+                            .testTag("trigger_notification_button")
+                    )
                 }
             }
         }
 
-        // Cross-device Sync Section
+        // Cross-device Sync
         item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-            ) {
+            MinimalPanel(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Sync,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text("Синхронизация устройств", style = MaterialTheme.typography.titleMedium)
-                    }
-
-                    Text(
-                        text = "Автоматическая облачная синхронизация через Firebase отключена (настройка отклонена). Используйте мгновенный снимок профиля для переноса избранного, истории просмотра и настроек на другое устройство:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    SettingsSectionTitle(
+                        icon = LucideIcons.RefreshCw,
+                        title = "Синхронизация устройств",
+                        subtitle = "Перенос избранного, прогресса и настроек по коду KP1"
                     )
 
-                    if (uiState.preferences.lastSyncTimestamp > 0L) {
-                        val dateText = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("ru"))
-                            .format(Date(uiState.preferences.lastSyncTimestamp))
+                    if (prefs.lastSyncTimestamp > 0L) {
+                        val dateText = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.forLanguageTag("ru"))
+                            .format(Date(prefs.lastSyncTimestamp))
                         Text(
                             text = "Последний снимок: $dateText",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
+                            color = palette.accent
                         )
                     }
 
@@ -415,36 +401,20 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Button(
+                        MinimalPrimaryButton(
+                            text = "Экспорт",
+                            icon = LucideIcons.Share,
                             onClick = {
-                                onExportSyncCode { code ->
-                                    exportedCodePreview = code
-                                }
+                                onExportSyncCode { code -> exportedCodePreview = code }
                             },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Share,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Экспорт")
-                        }
-                        OutlinedButton(
+                            modifier = Modifier.weight(1f)
+                        )
+                        MinimalSecondaryButton(
+                            text = "Импорт",
+                            icon = LucideIcons.Download,
                             onClick = { showImportDialog = true },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Download,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Импорт")
-                        }
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -454,21 +424,32 @@ fun SettingsScreen(
     exportedCodePreview?.let { code ->
         AlertDialog(
             onDismissRequest = { exportedCodePreview = null },
-            title = { Text("Код синхронизации готов") },
+            containerColor = palette.surface,
+            title = {
+                Text(
+                    text = "Код синхронизации готов",
+                    color = palette.textPrimary
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Скопируйте этот код или отправьте его на второе устройство для восстановления избранного и прогресса:",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "Скопируйте код или отправьте его на второе устройство:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.textSecondary
                     )
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(palette.surfaceElevated)
+                            .border(1.dp, palette.borderSubtle, RoundedCornerShape(12.dp))
+                            .padding(10.dp)
                     ) {
                         Text(
-                            text = code.take(140) + if (code.length > 140) "..." else "",
+                            text = code.take(140) + if (code.length > 140) "…" else "",
                             style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(10.dp)
+                            color = palette.textPrimary
                         )
                     }
                 }
@@ -486,9 +467,14 @@ fun SettingsScreen(
                         exportedCodePreview = null
                     }
                 ) {
-                    Icon(imageVector = Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Поделиться")
+                    Icon(
+                        imageVector = LucideIcons.Share,
+                        contentDescription = null,
+                        tint = palette.accent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Поделиться", color = palette.accent)
                 }
             },
             dismissButton = {
@@ -499,9 +485,14 @@ fun SettingsScreen(
                         exportedCodePreview = null
                     }
                 ) {
-                    Icon(imageVector = Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Копировать")
+                    Icon(
+                        imageVector = LucideIcons.Copy,
+                        contentDescription = null,
+                        tint = palette.textPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Копировать", color = palette.textPrimary)
                 }
             }
         )
@@ -510,32 +501,96 @@ fun SettingsScreen(
     if (showImportDialog) {
         AlertDialog(
             onDismissRequest = { showImportDialog = false },
-            title = { Text("Импорт с другого устройства") },
-            text = {
-                OutlinedTextField(
-                    value = importCodeInput,
-                    onValueChange = { importCodeInput = it },
-                    label = { Text("Вставьте код KP1:...") },
-                    maxLines = 4,
-                    modifier = Modifier.fillMaxWidth()
+            containerColor = palette.surface,
+            title = {
+                Text(
+                    text = "Импорт профиля",
+                    color = palette.textPrimary
                 )
             },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(palette.surfaceElevated)
+                        .border(1.dp, palette.border, RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    if (importCodeInput.isEmpty()) {
+                        Text(
+                            text = "Вставьте код KP1:…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.textTertiary
+                        )
+                    }
+                    BasicTextField(
+                        value = importCodeInput,
+                        onValueChange = { importCodeInput = it },
+                        maxLines = 4,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(color = palette.textPrimary),
+                        cursorBrush = SolidColor(palette.accent),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
-                Button(
+                TextButton(
                     onClick = {
                         onImportSyncCode(importCodeInput)
                         importCodeInput = ""
                         showImportDialog = false
                     }
                 ) {
-                    Text("Синхронизировать")
+                    Text("Синхронизировать", color = palette.accent, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showImportDialog = false }) {
-                    Text("Отмена")
+                    Text("Отмена", color = palette.textSecondary)
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun SettingsSectionTitle(
+    icon: ImageVector,
+    title: String,
+    subtitle: String
+) {
+    val palette = LocalKinoPalette.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(palette.surfaceElevated)
+                .border(1.dp, palette.borderSubtle, RoundedCornerShape(11.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = palette.textPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = palette.textPrimary
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = palette.textSecondary
+            )
+        }
     }
 }

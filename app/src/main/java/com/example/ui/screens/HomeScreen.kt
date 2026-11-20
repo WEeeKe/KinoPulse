@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,40 +19,41 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.local.MovieEntity
 import com.example.ui.MainUiState
+import com.example.ui.components.MinimalIconButton
+import com.example.ui.components.MinimalPanel
+import com.example.ui.components.MinimalPill
+import com.example.ui.components.MinimalPrimaryButton
+import com.example.ui.components.MinimalSecondaryButton
+import com.example.ui.components.MinimalSectionHeader
 import com.example.ui.components.MovieArtworkImage
 import com.example.ui.components.MoviePosterCard
 import com.example.ui.components.RecommendationCard
+import com.example.ui.components.bounceClick
+import com.example.ui.icons.LucideIcons
+import com.example.ui.theme.LocalKinoPalette
+import kotlin.math.absoluteValue
 
 @Composable
 fun HomeScreen(
@@ -61,54 +64,78 @@ fun HomeScreen(
     onGenreClick: (String) -> Unit,
     onOpenOfflineTab: () -> Unit,
     onOpenSearch: () -> Unit,
+    onSyncMoreOnline: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalKinoPalette.current
+    val prefs = uiState.preferences
+
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp)
+        modifier = modifier
+            .fillMaxSize()
+            .background(palette.background),
+        contentPadding = PaddingValues(top = 6.dp, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp)
     ) {
         if (uiState.effectiveOfflineMode) {
             item {
-                OfflineModeBanner(
+                MinimalOfflineBanner(
                     downloadedCount = uiState.downloadedMovies.size,
-                    isManualOffline = uiState.preferences.offlineModeEnabled,
+                    isManualOffline = prefs.offlineModeEnabled,
                     onOpenOfflineTab = onOpenOfflineTab,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = 18.dp)
                 )
             }
         }
 
-        uiState.featuredMovie?.let { featured ->
+        // Animated Hero Pager Showcase
+        if (uiState.featuredMovies.isNotEmpty()) {
             item {
-                HeroShowcaseCard(
-                    movie = featured,
-                    onOpenDetail = { onMovieClick(featured.id) },
-                    onPlay = { onPlayClick(featured.id) },
-                    onToggleFavorite = { onToggleFavorite(featured.id) },
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-        }
+                val pagerState = rememberPagerState(pageCount = { uiState.featuredMovies.size })
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HorizontalPager(
+                        state = pagerState,
+                        contentPadding = PaddingValues(horizontal = 18.dp),
+                        pageSpacing = 12.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { page ->
+                        val movie = uiState.featuredMovies[page]
+                        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+                        val scale = 1f - (pageOffset.coerceIn(0f, 1f) * 0.04f)
+                        val alpha = 1f - (pageOffset.coerceIn(0f, 1f) * 0.18f)
 
-        if (uiState.availableGenres.isNotEmpty()) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SectionHeader(
-                        title = "Жанры кино",
-                        actionLabel = "Все фильтры",
-                        onAction = onOpenSearch
-                    )
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        HeroCinemaCard(
+                            movie = movie,
+                            onOpenDetail = { onMovieClick(movie.id) },
+                            onPlay = { onPlayClick(movie.id) },
+                            onToggleFavorite = { onToggleFavorite(movie.id) },
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                                this.alpha = alpha
+                            }
+                        )
+                    }
+
+                    // Minimal animated pill page indicator
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(uiState.availableGenres) { genre ->
-                            FilterChip(
-                                selected = false,
-                                onClick = { onGenreClick(genre) },
-                                label = { Text(genre) },
-                                modifier = Modifier.testTag("home_genre_chip_$genre")
+                        repeat(uiState.featuredMovies.size) { idx ->
+                            val isSelected = pagerState.currentPage == idx
+                            val width by animateDpAsState(
+                                targetValue = if (isSelected) 20.dp else 6.dp,
+                                label = "dot_w_$idx"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 3.dp)
+                                    .height(5.dp)
+                                    .width(width)
+                                    .clip(CircleShape)
+                                    .background(if (isSelected) palette.textPrimary else palette.border)
                             )
                         }
                     }
@@ -116,16 +143,36 @@ fun HomeScreen(
             }
         }
 
+        // Minimal Genre Pills
+        if (uiState.availableGenres.isNotEmpty()) {
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiState.availableGenres) { genre ->
+                        MinimalPill(
+                            text = genre,
+                            selected = false,
+                            onClick = { onGenreClick(genre) },
+                            modifier = Modifier.testTag("home_genre_chip_$genre")
+                        )
+                    }
+                }
+            }
+        }
+
+        // Continue Watching
         if (uiState.continueWatching.isNotEmpty()) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader(title = "Продолжить просмотр")
+                    MinimalSectionHeader(title = "Продолжить")
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        contentPadding = PaddingValues(horizontal = 18.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(uiState.continueWatching, key = { "cw_${it.id}" }) { movie ->
-                            ContinueWatchingCard(
+                            ContinueWatchingPillCard(
                                 movie = movie,
                                 onClick = { onPlayClick(movie.id) }
                             )
@@ -135,24 +182,29 @@ fun HomeScreen(
             }
         }
 
-        if (uiState.newReleases.isNotEmpty()) {
+        // HD & Open Cinema Selection
+        if (uiState.hdSelections.isNotEmpty()) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader(
-                        title = "Новинки проката",
-                        actionLabel = "Каталог",
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    MinimalSectionHeader(
+                        title = "В высоком качестве",
+                        subtitle = "Реальные фильмы и классика HD",
+                        actionLabel = "Все",
                         onAction = onOpenSearch
                     )
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(horizontal = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        items(uiState.newReleases, key = { "new_${it.id}" }) { movie ->
+                        items(uiState.hdSelections.take(10), key = { "hd_${it.id}" }) { movie ->
                             MoviePosterCard(
                                 movie = movie,
                                 onClick = { onMovieClick(movie.id) },
                                 onToggleFavorite = { onToggleFavorite(movie.id) },
-                                modifier = Modifier.width(156.dp)
+                                showRating = prefs.showRatingOnCards,
+                                showMeta = prefs.showMetaOnCards,
+                                showGenres = prefs.showGenresOnCards,
+                                modifier = Modifier.width(148.dp)
                             )
                         }
                     }
@@ -160,20 +212,17 @@ fun HomeScreen(
             }
         }
 
+        // Personalized Recommendations
         if (uiState.recommendations.isNotEmpty()) {
             item {
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Рекомендации для вас",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Text(
-                        text = "Персональная подборка на основе избранного и истории",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Подобрано для вас",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = palette.textPrimary
                     )
                     uiState.recommendations.take(4).forEach { rec ->
                         RecommendationCard(
@@ -187,225 +236,302 @@ fun HomeScreen(
             }
         }
 
-        if (uiState.downloadedMovies.isNotEmpty()) {
+        // Classic World Cinema
+        if (uiState.classicCinema.isNotEmpty()) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SectionHeader(
-                        title = "Доступно офлайн",
-                        actionLabel = "Управлять",
-                        onAction = onOpenOfflineTab
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    MinimalSectionHeader(
+                        title = "Золотая коллекция",
+                        subtitle = "Шедевры мирового кино",
+                        actionLabel = "Каталог",
+                        onAction = onOpenSearch
                     )
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(horizontal = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        items(uiState.downloadedMovies, key = { "dl_${it.id}" }) { movie ->
+                        items(uiState.classicCinema.take(10), key = { "classic_${it.id}" }) { movie ->
                             MoviePosterCard(
                                 movie = movie,
                                 onClick = { onMovieClick(movie.id) },
                                 onToggleFavorite = { onToggleFavorite(movie.id) },
-                                modifier = Modifier.width(150.dp)
+                                showRating = prefs.showRatingOnCards,
+                                showMeta = prefs.showMetaOnCards,
+                                showGenres = prefs.showGenresOnCards,
+                                modifier = Modifier.width(148.dp)
                             )
                         }
                     }
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun OfflineModeBanner(
-    downloadedCount: Int,
-    isManualOffline: Boolean,
-    onOpenOfflineTab: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.CloudOff,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (isManualOffline) "Включён офлайн-режим" else "Нет подключения к сети",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Text(
-                    text = "Кешированный каталог и $downloadedCount загруженных фильмов готовы к просмотру",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
-                )
+        // Downloaded for Offline
+        if (uiState.downloadedMovies.isNotEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    MinimalSectionHeader(
+                        title = "Доступно офлайн",
+                        actionLabel = "Управлять",
+                        onAction = onOpenOfflineTab
+                    )
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(uiState.downloadedMovies, key = { "dl_${it.id}" }) { movie ->
+                            MoviePosterCard(
+                                movie = movie,
+                                onClick = { onMovieClick(movie.id) },
+                                onToggleFavorite = { onToggleFavorite(movie.id) },
+                                showRating = prefs.showRatingOnCards,
+                                showMeta = prefs.showMetaOnCards,
+                                showGenres = false,
+                                modifier = Modifier.width(142.dp)
+                            )
+                        }
+                    }
+                }
             }
-            TextButton(onClick = onOpenOfflineTab) {
-                Text("Офлайн")
+        }
+
+        // Live Archive.org Load More Card
+        item {
+            MinimalPanel(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(palette.surfaceElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (uiState.isSyncingOnline) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = palette.accent
+                            )
+                        } else {
+                            Icon(
+                                imageVector = LucideIcons.Globe,
+                                contentDescription = null,
+                                tint = palette.textPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Онлайн-каталог Archive.org",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = palette.textPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "В базе сейчас ${uiState.allMovies.size} фильмов. Загрузите ещё реальных картин.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.textSecondary
+                        )
+                    }
+                    MinimalSecondaryButton(
+                        text = if (uiState.isSyncingOnline) "..." else "Ещё",
+                        onClick = onSyncMoreOnline,
+                        enabled = !uiState.isSyncingOnline && !uiState.effectiveOfflineMode,
+                        modifier = Modifier.testTag("sync_archive_button")
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun HeroShowcaseCard(
+private fun MinimalOfflineBanner(
+    downloadedCount: Int,
+    isManualOffline: Boolean,
+    onOpenOfflineTab: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalKinoPalette.current
+    MinimalPanel(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = LucideIcons.WifiOff,
+                contentDescription = null,
+                tint = palette.accent,
+                modifier = Modifier.size(18.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isManualOffline) "Автономный режим" else "Нет подключения",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = palette.textPrimary
+                )
+                Text(
+                    text = "Кеш активен · Офлайн-фильмов: $downloadedCount",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.textSecondary
+                )
+            }
+            Text(
+                text = "Открыть",
+                style = MaterialTheme.typography.labelLarge,
+                color = palette.accent,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenOfflineTab)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeroCinemaCard(
     movie: MovieEntity,
     onOpenDetail: () -> Unit,
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    val palette = LocalKinoPalette.current
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(272.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onOpenDetail)
-            .testTag("hero_showcase_card"),
-        shape = RoundedCornerShape(24.dp)
+            .height(292.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(palette.surfaceElevated)
+            .border(1.dp, palette.borderSubtle, RoundedCornerShape(22.dp))
+            .bounceClick(scaleDown = 0.98f, onClick = onOpenDetail)
+            .testTag("hero_showcase_card")
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            MovieArtworkImage(
-                posterKey = movie.posterKey,
-                posterUrl = movie.posterUrl,
-                contentDescription = "Премьера ${movie.title}",
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.15f),
-                                Color.Black.copy(alpha = 0.45f),
-                                Color.Black.copy(alpha = 0.90f)
-                            )
+        MovieArtworkImage(
+            posterKey = movie.posterKey,
+            posterUrl = movie.posterUrl,
+            contentDescription = movie.title,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.14f),
+                            Color.Black.copy(alpha = 0.42f),
+                            Color.Black.copy(alpha = 0.92f)
                         )
                     )
-            )
+                )
+        )
 
+        // Subtle rating pill top-left
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(14.dp)
+                .clip(RoundedCornerShape(50))
+                .background(Color.Black.copy(alpha = 0.56f))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(50))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = LucideIcons.Star,
+                contentDescription = null,
+                tint = palette.ratingGold,
+                modifier = Modifier.size(12.dp)
+            )
+            Text(
+                text = "${movie.rating}  ·  ${movie.releaseYear}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = movie.title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${movie.genres.take(3).joinToString(" · ")} · ${movie.durationMinutes} мин",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.78f)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
             Row(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.tertiary
-                ) {
-                    Text(
-                        text = "ПРЕМЬЕРА ${movie.releaseYear}",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.Black.copy(alpha = 0.65f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "${movie.rating}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = movie.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                MinimalPrimaryButton(
+                    text = if (movie.isDownloaded) "Офлайн" else "Смотреть",
+                    icon = LucideIcons.Play,
+                    onClick = onPlay,
+                    useAccent = false,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("hero_play_button")
                 )
-                Text(
-                    text = "${movie.genres.joinToString(" · ")} · ${movie.durationMinutes} мин",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.85f)
+                MinimalIconButton(
+                    icon = if (movie.isFavorite) LucideIcons.BookmarkFilled else LucideIcons.Bookmark,
+                    contentDescription = "В избранное",
+                    onClick = onToggleFavorite,
+                    containerColor = Color.White.copy(alpha = 0.16f),
+                    contentColor = if (movie.isFavorite) palette.accent else Color.White,
+                    borderColor = Color.White.copy(alpha = 0.2f),
+                    size = 48.dp,
+                    iconSize = 19.dp,
+                    modifier = Modifier.testTag("hero_fav_button")
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Button(
-                        onClick = onPlay,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("hero_play_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (movie.isDownloaded) "Смотреть офлайн" else "Смотреть")
-                    }
-                    FilledTonalIconButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("hero_fav_button")
-                    ) {
-                        Icon(
-                            imageVector = if (movie.isFavorite) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                            contentDescription = if (movie.isFavorite) "Убрать из избранного" else "В избранное",
-                            tint = if (movie.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
             }
         }
     }
 }
 
 @Composable
-private fun ContinueWatchingCard(
+private fun ContinueWatchingPillCard(
     movie: MovieEntity,
     onClick: () -> Unit
 ) {
-    Card(
+    val palette = LocalKinoPalette.current
+    MinimalPanel(
         modifier = Modifier
-            .width(220.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            .width(236.dp)
+            .bounceClick(scaleDown = 0.97f, onClick = onClick),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
@@ -414,8 +540,9 @@ private fun ContinueWatchingCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(palette.surfaceElevated)
             ) {
                 MovieArtworkImage(
                     posterKey = movie.posterKey,
@@ -428,47 +555,24 @@ private fun ContinueWatchingCard(
                 Text(
                     text = movie.title,
                     style = MaterialTheme.typography.titleSmall,
+                    color = palette.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 val mins = movie.watchProgressSeconds / 60
                 val secs = movie.watchProgressSeconds % 60
                 Text(
-                    text = "Продолжить с %02d:%02d".format(mins, secs),
+                    text = "С %02d:%02d".format(mins, secs),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = palette.accent
                 )
             }
             Icon(
-                imageVector = Icons.Filled.PlayArrow,
+                imageVector = LucideIcons.Play,
                 contentDescription = "Продолжить",
-                tint = MaterialTheme.colorScheme.primary
+                tint = palette.textPrimary,
+                modifier = Modifier.size(16.dp)
             )
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge
-        )
-        if (actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) {
-                Text(actionLabel)
-            }
         }
     }
 }

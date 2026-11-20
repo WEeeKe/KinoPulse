@@ -102,6 +102,7 @@ class OfflineCacheManager(private val context: Context) {
         runCatching { File(offlineMoviesDir, "$movieId.mp4").delete() }
     }
 
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
     suspend fun clearVolatileCaches() = withContext(Dispatchers.IO) {
         runCatching {
             context.imageLoader.memoryCache?.clear()
@@ -112,6 +113,7 @@ class OfflineCacheManager(private val context: Context) {
         }
     }
 
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
     suspend fun getCacheStats(): CacheStats = withContext(Dispatchers.IO) {
         val videoFiles = offlineMoviesDir.listFiles()?.filter { it.isFile && it.extension == "mp4" }
             ?: emptyList()

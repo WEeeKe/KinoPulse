@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
         ChatMessageEntity::class,
         NotificationItemEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class KinoPulseDatabase : RoomDatabase() {
@@ -32,6 +32,7 @@ abstract class KinoPulseDatabase : RoomDatabase() {
                     KinoPulseDatabase::class.java,
                     "kinopulse_cache.db"
                 )
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)

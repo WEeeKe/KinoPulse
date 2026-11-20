@@ -8,6 +8,7 @@ import com.example.data.cache.DownloadResult
 import com.example.data.local.ChatMessageEntity
 import com.example.data.local.MovieEntity
 import com.example.data.local.NotificationItemEntity
+import com.example.data.prefs.CardLayoutMode
 import com.example.data.prefs.UserPreferences
 import com.example.data.recommendations.RecommendationEngine
 import com.example.data.recommendations.RecommendedMovie
@@ -25,33 +26,65 @@ import kotlinx.coroutines.launch
 
 enum class YearFilterPreset(val label: String) {
     ALL("Все годы"),
-    RECENT_2024_2026("2024–2026"),
-    ERA_2020_2023("2020–2023"),
-    ERA_2010_2019("2010–2019"),
-    CLASSIC_PRE_2010("До 2010"),
+    MODERN("2000–2026"),
+    MID_CENTURY("1950–1999"),
+    GOLDEN_ERA("До 1950"),
     CUSTOM("Диапазон")
+}
+
+enum class MinRatingFilter(val label: String, val minRating: Double) {
+    ANY("Любой", 0.0),
+    SEVEN("7.0+", 7.0),
+    SEVEN_FIVE("7.5+", 7.5),
+    EIGHT("8.0+", 8.0)
+}
+
+enum class DurationFilter(val label: String) {
+    ANY("Любая"),
+    SHORT("До 60 мин"),
+    MEDIUM("60–100 мин"),
+    LONG("100+ мин")
 }
 
 enum class SortOption(val label: String) {
     RATING("По рейтингу"),
     YEAR_NEW("Сначала новые"),
-    DURATION("Короткие")
+    YEAR_OLD("Сначала классика"),
+    DURATION("Короткие"),
+    TITLE("По названию")
 }
 
 data class SearchFilterState(
     val query: String = "",
     val selectedGenres: Set<String> = emptySet(),
     val yearPreset: YearFilterPreset = YearFilterPreset.ALL,
-    val yearStart: Int = 1994,
+    val yearStart: Int = 1900,
     val yearEnd: Int = 2026,
+    val minRating: MinRatingFilter = MinRatingFilter.ANY,
+    val durationFilter: DurationFilter = DurationFilter.ANY,
     val sortBy: SortOption = SortOption.RATING,
-    val offlineOnly: Boolean = false
-)
+    val offlineOnly: Boolean = false,
+    val favoritesOnly: Boolean = false,
+    val hdOnly: Boolean = false
+) {
+    val activeFilterCount: Int
+        get() {
+            var count = selectedGenres.size
+            if (yearPreset != YearFilterPreset.ALL) count++
+            if (minRating != MinRatingFilter.ANY) count++
+            if (durationFilter != DurationFilter.ANY) count++
+            if (offlineOnly) count++
+            if (favoritesOnly) count++
+            if (hdOnly) count++
+            return count
+        }
+}
 
 data class MainUiState(
     val allMovies: List<MovieEntity> = emptyList(),
-    val featuredMovie: MovieEntity? = null,
-    val newReleases: List<MovieEntity> = emptyList(),
+    val featuredMovies: List<MovieEntity> = emptyList(),
+    val hdSelections: List<MovieEntity> = emptyList(),
+    val classicCinema: List<MovieEntity> = emptyList(),
     val recommendations: List<RecommendedMovie> = emptyList(),
     val continueWatching: List<MovieEntity> = emptyList(),
     val favorites: List<MovieEntity> = emptyList(),
@@ -60,6 +93,7 @@ data class MainUiState(
     val unreadNotificationsCount: Int = 0,
     val preferences: UserPreferences = UserPreferences(),
     val isDeviceOnline: Boolean = true,
+    val isSyncingOnline: Boolean = false,
     val downloadProgress: Map<String, Float> = emptyMap(),
     val cacheStats: CacheStats = CacheStats(),
     val searchFilter: SearchFilterState = SearchFilterState(),
@@ -78,6 +112,7 @@ class KinoPulseViewModel(
 
     private val _searchFilter = MutableStateFlow(SearchFilterState())
     private val _cacheStats = MutableStateFlow(CacheStats())
+    private val _isSyncingOnline = MutableStateFlow(false)
     private val _snackbarMessage = MutableStateFlow<String?>(null)
 
     private val moviesBundleFlow = combine(
@@ -103,11 +138,13 @@ class KinoPulseViewModel(
     val uiState: StateFlow<MainUiState> = combine(
         moviesBundleFlow,
         systemBundleFlow,
+        _isSyncingOnline,
         _snackbarMessage
-    ) { movies, system, snackbar ->
+    ) { movies, system, syncing, snackbar ->
         val all = movies.all
-        val featured = all.firstOrNull { it.isFeatured } ?: all.firstOrNull()
-        val newReleases = all.filter { it.isNewRelease }
+        val featured = all.filter { it.isFeatured }.ifEmpty { all.take(3) }
+        val hdSelections = all.filter { it.isHd }.sortedByDescending { it.releaseYear }
+        val classicCinema = all.filter { it.releaseYear < 1980 }.sortedByDescending { it.rating }
         val recommendations = RecommendationEngine.buildRecommendations(all, limit = 8)
         val continueWatching = all.filter { it.watchProgressSeconds > 0L }
             .sortedByDescending { it.lastWatchedAt }
@@ -116,8 +153,9 @@ class KinoPulseViewModel(
 
         MainUiState(
             allMovies = all,
-            featuredMovie = featured,
-            newReleases = newReleases,
+            featuredMovies = featured,
+            hdSelections = hdSelections,
+            classicCinema = classicCinema,
             recommendations = recommendations,
             continueWatching = continueWatching,
             favorites = movies.favorites,
@@ -126,6 +164,7 @@ class KinoPulseViewModel(
             unreadNotificationsCount = movies.unreadCount,
             preferences = system.prefs,
             isDeviceOnline = system.online,
+            isSyncingOnline = syncing,
             downloadProgress = system.progress,
             cacheStats = system.cache,
             searchFilter = system.filter,
@@ -149,6 +188,46 @@ class KinoPulseViewModel(
 
     fun relatedMovies(movie: MovieEntity, allMovies: List<MovieEntity>): List<RecommendedMovie> =
         RecommendationEngine.relatedMovies(movie, allMovies)
+
+    suspend fun resolvePlayableVideoUrl(movie: MovieEntity): String? =
+        repository.resolvePlayableVideoUrl(movie)
+
+    fun syncMoreRealMovies(nextPage: Boolean = true) {
+        if (_isSyncingOnline.value) return
+        viewModelScope.launch {
+            _isSyncingOnline.value = true
+            val result = repository.syncOnlineCatalog(nextPage = nextPage)
+            _isSyncingOnline.value = false
+            result.onSuccess { added ->
+                _snackbarMessage.value = if (added > 0) {
+                    "Загружено $added новых фильмов из Internet Archive"
+                } else {
+                    "Каталог актуален — новые фильмы уже в базе"
+                }
+            }.onFailure { err ->
+                _snackbarMessage.value = err.message ?: "Не удалось загрузить каталог из сети"
+            }
+        }
+    }
+
+    fun searchOnlineArchive() {
+        val query = _searchFilter.value.query.trim()
+        if (query.length < 2 || _isSyncingOnline.value) return
+        viewModelScope.launch {
+            _isSyncingOnline.value = true
+            val result = repository.searchArchiveOnline(query)
+            _isSyncingOnline.value = false
+            result.onSuccess { added ->
+                _snackbarMessage.value = if (added > 0) {
+                    "Найдено и добавлено из Archive.org: $added"
+                } else {
+                    "Новых совпадений в Archive.org не найдено"
+                }
+            }.onFailure { err ->
+                _snackbarMessage.value = err.message ?: "Ошибка онлайн-поиска"
+            }
+        }
+    }
 
     fun toggleFavorite(movieId: String) {
         viewModelScope.launch {
@@ -198,7 +277,7 @@ class KinoPulseViewModel(
     fun clearVolatileCache() {
         viewModelScope.launch {
             _cacheStats.value = repository.clearVolatileCache()
-            _snackbarMessage.value = "Временный кеш изображений и сети очищен"
+            _snackbarMessage.value = "Временный кеш очищен"
         }
     }
 
@@ -220,11 +299,41 @@ class KinoPulseViewModel(
         }
     }
 
+    fun setCardLayoutMode(mode: CardLayoutMode) {
+        viewModelScope.launch {
+            repository.prefsRepo.setCardLayoutMode(mode)
+        }
+    }
+
+    fun cycleCardLayoutMode() {
+        viewModelScope.launch {
+            repository.prefsRepo.cycleCardLayoutMode()
+        }
+    }
+
+    fun setShowRatingOnCards(show: Boolean) {
+        viewModelScope.launch {
+            repository.prefsRepo.setShowRatingOnCards(show)
+        }
+    }
+
+    fun setShowMetaOnCards(show: Boolean) {
+        viewModelScope.launch {
+            repository.prefsRepo.setShowMetaOnCards(show)
+        }
+    }
+
+    fun setShowGenresOnCards(show: Boolean) {
+        viewModelScope.launch {
+            repository.prefsRepo.setShowGenresOnCards(show)
+        }
+    }
+
     fun setOfflineMode(enabled: Boolean) {
         viewModelScope.launch {
             repository.prefsRepo.setOfflineMode(enabled)
             _snackbarMessage.value = if (enabled) {
-                "Офлайн-режим включён: показываем сохранённый каталог и загрузки"
+                "Офлайн-режим включён"
             } else {
                 "Офлайн-режим отключён"
             }
@@ -241,7 +350,7 @@ class KinoPulseViewModel(
     fun triggerNewReleaseNotification() {
         viewModelScope.launch {
             repository.triggerNewReleaseAlert()
-            _snackbarMessage.value = "Уведомление о новинке отправлено"
+            _snackbarMessage.value = "Уведомление отправлено"
         }
     }
 
@@ -287,9 +396,9 @@ class KinoPulseViewModel(
         viewModelScope.launch {
             val result = repository.importSyncCode(code)
             result.onSuccess { count ->
-                _snackbarMessage.value = "Синхронизация завершена: обновлено фильмов ($count)"
+                _snackbarMessage.value = "Синхронизация завершена: обновлено ($count)"
             }.onFailure {
-                _snackbarMessage.value = "Некорректный код синхронизации. Проверьте формат."
+                _snackbarMessage.value = "Некорректный код синхронизации"
             }
         }
     }
@@ -318,11 +427,10 @@ class KinoPulseViewModel(
 
     fun selectYearPreset(preset: YearFilterPreset) {
         val (start, end) = when (preset) {
-            YearFilterPreset.ALL -> 1994 to 2026
-            YearFilterPreset.RECENT_2024_2026 -> 2024 to 2026
-            YearFilterPreset.ERA_2020_2023 -> 2020 to 2023
-            YearFilterPreset.ERA_2010_2019 -> 2010 to 2019
-            YearFilterPreset.CLASSIC_PRE_2010 -> 1994 to 2009
+            YearFilterPreset.ALL -> 1900 to 2026
+            YearFilterPreset.MODERN -> 2000 to 2026
+            YearFilterPreset.MID_CENTURY -> 1950 to 1999
+            YearFilterPreset.GOLDEN_ERA -> 1900 to 1949
             YearFilterPreset.CUSTOM -> _searchFilter.value.yearStart to _searchFilter.value.yearEnd
         }
         _searchFilter.update {
@@ -340,6 +448,14 @@ class KinoPulseViewModel(
         }
     }
 
+    fun selectMinRating(filter: MinRatingFilter) {
+        _searchFilter.update { it.copy(minRating = filter) }
+    }
+
+    fun selectDurationFilter(filter: DurationFilter) {
+        _searchFilter.update { it.copy(durationFilter = filter) }
+    }
+
     fun updateSortOption(option: SortOption) {
         _searchFilter.update { it.copy(sortBy = option) }
     }
@@ -348,7 +464,19 @@ class KinoPulseViewModel(
         _searchFilter.update { it.copy(offlineOnly = !it.offlineOnly) }
     }
 
+    fun toggleFavoritesOnlyFilter() {
+        _searchFilter.update { it.copy(favoritesOnly = !it.favoritesOnly) }
+    }
+
+    fun toggleHdOnlyFilter() {
+        _searchFilter.update { it.copy(hdOnly = !it.hdOnly) }
+    }
+
     fun resetSearchFilters() {
+        _searchFilter.update { SearchFilterState(query = it.query) }
+    }
+
+    fun resetAllSearchAndQuery() {
         _searchFilter.value = SearchFilterState()
     }
 
@@ -366,6 +494,7 @@ class KinoPulseViewModel(
                 movie.title.lowercase().contains(q) ||
                 movie.originalTitle.lowercase().contains(q) ||
                 movie.director.lowercase().contains(q) ||
+                movie.castCsv.lowercase().contains(q) ||
                 movie.genresCsv.lowercase().contains(q) ||
                 movie.releaseYear.toString().contains(q)
 
@@ -373,16 +502,27 @@ class KinoPulseViewModel(
                 filter.selectedGenres.any { selected -> selected in movie.genres }
 
             val matchesYear = movie.releaseYear in filter.yearStart..filter.yearEnd
-
+            val matchesRating = movie.rating >= filter.minRating.minRating
+            val matchesDuration = when (filter.durationFilter) {
+                DurationFilter.ANY -> true
+                DurationFilter.SHORT -> movie.durationMinutes < 60
+                DurationFilter.MEDIUM -> movie.durationMinutes in 60..100
+                DurationFilter.LONG -> movie.durationMinutes > 100
+            }
             val matchesOffline = !filter.offlineOnly || movie.isDownloaded
+            val matchesFav = !filter.favoritesOnly || movie.isFavorite
+            val matchesHd = !filter.hdOnly || movie.isHd
 
-            matchesQuery && matchesGenre && matchesYear && matchesOffline
+            matchesQuery && matchesGenre && matchesYear && matchesRating &&
+                matchesDuration && matchesOffline && matchesFav && matchesHd
         }
 
         return when (filter.sortBy) {
             SortOption.RATING -> matched.sortedByDescending { it.rating }
             SortOption.YEAR_NEW -> matched.sortedByDescending { it.releaseYear }
+            SortOption.YEAR_OLD -> matched.sortedBy { it.releaseYear }
             SortOption.DURATION -> matched.sortedBy { it.durationMinutes }
+            SortOption.TITLE -> matched.sortedBy { it.title.lowercase() }
         }
     }
 

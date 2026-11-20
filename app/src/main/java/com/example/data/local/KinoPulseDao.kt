@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface KinoPulseDao {
-    @Query("SELECT * FROM movies ORDER BY isFeatured DESC, releaseYear DESC, rating DESC")
+    @Query("SELECT * FROM movies ORDER BY isFeatured DESC, rating DESC, releaseYear DESC")
     fun observeAllMovies(): Flow<List<MovieEntity>>
 
     @Query("SELECT * FROM movies")
@@ -20,7 +20,7 @@ interface KinoPulseDao {
     @Query("SELECT * FROM movies WHERE id = :movieId LIMIT 1")
     suspend fun getMovieByIdOnce(movieId: String): MovieEntity?
 
-    @Query("SELECT * FROM movies WHERE isFavorite = 1 ORDER BY lastWatchedAt DESC, releaseYear DESC")
+    @Query("SELECT * FROM movies WHERE isFavorite = 1 ORDER BY lastWatchedAt DESC, rating DESC")
     fun observeFavorites(): Flow<List<MovieEntity>>
 
     @Query("SELECT * FROM movies WHERE isDownloaded = 1 ORDER BY cachedAt DESC")
@@ -31,6 +31,12 @@ interface KinoPulseDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMovies(movies: List<MovieEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMoviesIfAbsent(movies: List<MovieEntity>)
+
+    @Query("UPDATE movies SET videoUrl = :videoUrl WHERE id = :movieId")
+    suspend fun updateResolvedVideoUrl(movieId: String, videoUrl: String)
 
     @Query("UPDATE movies SET isFavorite = :isFavorite WHERE id = :movieId")
     suspend fun setFavorite(movieId: String, isFavorite: Boolean)
@@ -49,9 +55,6 @@ interface KinoPulseDao {
         sizeMb: Double,
         cachedAt: Long
     )
-
-    @Query("UPDATE movies SET isFavorite = 0")
-    suspend fun clearAllFavorites()
 
     // Chat
     @Query("SELECT * FROM chat_messages WHERE movieId = :movieId ORDER BY timestamp ASC")

@@ -7,6 +7,7 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.data.cache.OfflineCacheManager
 import com.example.data.local.KinoPulseDatabase
+import com.example.data.network.ArchiveOrgMovieService
 import com.example.data.network.NetworkMonitor
 import com.example.data.prefs.UserPreferencesRepository
 import com.example.data.repository.KinoPulseRepository
@@ -28,13 +29,15 @@ class KinoPulseApp : Application(), ImageLoaderFactory {
         val prefsRepo = UserPreferencesRepository(this)
         val cacheManager = OfflineCacheManager(this)
         val networkMonitor = NetworkMonitor(this)
+        val archiveService = ArchiveOrgMovieService(cacheManager.okHttpClient)
 
         repository = KinoPulseRepository(
             context = this,
             dao = database.kinoPulseDao(),
             prefsRepo = prefsRepo,
             cacheManager = cacheManager,
-            networkMonitor = networkMonitor
+            networkMonitor = networkMonitor,
+            archiveService = archiveService
         )
 
         appScope.launch {

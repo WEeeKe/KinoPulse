@@ -2,29 +2,36 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Cinema Dark (Night Mode) Palette
-val CinemaObsidian = Color(0xFF0B0D14)
-val CinemaAmoledBlack = Color(0xFF040508)
-val CinemaSurfaceDark = Color(0xFF141824)
-val CinemaSurfaceElevatedDark = Color(0xFF1E2436)
-val CinemaSurfaceHighestDark = Color(0xFF283047)
+// Minimalist Cinema Dark (Carbon Obsidian) Palette
+val CarbonBackground = Color(0xFF0A0A0D)
+val TrueBlackAmoled = Color(0xFF000000)
+val CarbonSurface = Color(0xFF131318)
+val CarbonSurfaceElevated = Color(0xFF1B1B22)
+val CarbonSurfaceHigh = Color(0xFF24242E)
+val CarbonBorder = Color(0xFF2A2A35)
+val CarbonBorderSubtle = Color(0xFF1E1E26)
 
-val AmberGold = Color(0xFFF5B041)
-val AmberGoldDark = Color(0xFFD48817)
-val AmberSoft = Color(0xFFFFE0A3)
+// Minimalist Cinema Light (Alabaster Studio) Palette
+val AlabasterBackground = Color(0xFFF6F6F8)
+val AlabasterSurface = Color(0xFFFFFFFF)
+val AlabasterSurfaceElevated = Color(0xFFEDEDF1)
+val AlabasterSurfaceHigh = Color(0xFFE3E3E9)
+val AlabasterBorder = Color(0xFFDCDCE3)
+val AlabasterBorderSubtle = Color(0xFFEBEBF0)
 
-val CrimsonPulse = Color(0xFFE5484D)
-val TealSignal = Color(0xFF2EC4B6)
+// Refined Accents (Apple TV / MUBI inspired)
+val CinemaAccentRed = Color(0xFFFF375F)
+val CinemaAccentRedLight = Color(0xFFD91E41)
+val RatingChampagne = Color(0xFFFFD60A)
+val RatingChampagneLight = Color(0xFFC98A00)
+val SignalEmerald = Color(0xFF30D158)
+val SignalEmeraldLight = Color(0xFF1E9E43)
 
-// Cinema Light (Day Mode) Palette
-val CinemaDayBackground = Color(0xFFF7F6F2)
-val CinemaDaySurface = Color(0xFFFFFFFF)
-val CinemaDaySurfaceElevated = Color(0xFFEEECE5)
-val CinemaDayInk = Color(0xFF131620)
-val CinemaDayInkMuted = Color(0xFF565D70)
+// Ink & Typography
+val InkPrimaryDark = Color(0xFFF5F5F7)
+val InkSecondaryDark = Color(0xFF9898A6)
+val InkTertiaryDark = Color(0xFF636370)
 
-// Text & Borders
-val TextPrimaryDark = Color(0xFFF3F4F8)
-val TextSecondaryDark = Color(0xFF9FA8C0)
-val OutlineDark = Color(0xFF2C344B)
-val OutlineLight = Color(0xFFD5D2C8)
+val InkPrimaryLight = Color(0xFF111115)
+val InkSecondaryLight = Color(0xFF636370)
+val InkTertiaryLight = Color(0xFF8E8E98)

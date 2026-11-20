@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,25 +20,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,14 +33,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.local.MovieEntity
 import com.example.ui.MainUiState
+import com.example.ui.components.MinimalIconButton
+import com.example.ui.components.MinimalPanel
+import com.example.ui.components.MinimalPill
+import com.example.ui.components.MinimalSegmentedBar
 import com.example.ui.components.MovieArtworkImage
+import com.example.ui.components.bounceClick
+import com.example.ui.icons.LucideIcons
+import com.example.ui.theme.LocalKinoPalette
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FavoritesScreen(
     uiState: MainUiState,
@@ -63,98 +59,118 @@ fun FavoritesScreen(
     onRemoveDownload: (MovieEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val palette = LocalKinoPalette.current
     var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab) }
     var selectedCollection by remember { mutableStateOf("Все") }
     val collections = listOf("Все", "Любимые", "Смотреть позже", "На выходные")
 
-    Column(modifier = modifier.fillMaxSize()) {
-        SecondaryTabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Избранное (${uiState.favorites.size})") },
-                modifier = Modifier.testTag("tab_favorites")
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text("Офлайн (${uiState.downloadedMovies.size})") },
-                modifier = Modifier.testTag("tab_offline")
-            )
-        }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(palette.background)
+    ) {
+        MinimalSegmentedBar(
+            options = listOf(
+                "Избранное (${uiState.favorites.size})",
+                "Офлайн (${uiState.downloadedMovies.size})"
+            ),
+            selectedIndex = selectedTab,
+            onSelect = { selectedTab = it },
+            modifier = Modifier
+                .padding(horizontal = 18.dp, vertical = 10.dp)
+                .testTag("tab_favorites")
+        )
 
-        if (selectedTab == 0) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(collections) { collection ->
-                    FilterChip(
-                        selected = selectedCollection == collection,
-                        onClick = { selectedCollection = collection },
-                        label = { Text(collection) }
-                    )
-                }
-            }
+        AnimatedContent(
+            targetState = selectedTab,
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "fav_tab_anim"
+        ) { tab ->
+            if (tab == 0) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(collections) { collection ->
+                            MinimalPill(
+                                text = collection,
+                                selected = selectedCollection == collection,
+                                onClick = { selectedCollection = collection }
+                            )
+                        }
+                    }
 
-            val displayed = if (selectedCollection == "Все") {
-                uiState.favorites
-            } else {
-                uiState.favorites.filter { it.userCollection == selectedCollection }
-            }
+                    val displayed = if (selectedCollection == "Все") {
+                        uiState.favorites
+                    } else {
+                        uiState.favorites.filter { it.userCollection == selectedCollection }
+                    }
 
-            if (displayed.isEmpty()) {
-                EmptyCollectionState(
-                    icon = Icons.Filled.Bookmark,
-                    title = "Список пока пуст",
-                    subtitle = "Нажмите на значок закладки на карточке фильма, чтобы добавить его в личную коллекцию."
-                )
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(displayed, key = { it.id }) { movie ->
-                        SavedMovieRowCard(
-                            movie = movie,
-                            downloadProgress = uiState.downloadProgress[movie.id],
-                            onClick = { onMovieClick(movie.id) },
-                            onPlay = { onPlayClick(movie.id) },
-                            onDownloadOrRemove = {
-                                if (movie.isDownloaded) onRemoveDownload(movie) else onDownloadMovie(movie)
-                            },
-                            onRemoveFavorite = { onToggleFavorite(movie.id) }
+                    if (displayed.isEmpty()) {
+                        EmptyMinimalState(
+                            icon = LucideIcons.Bookmark,
+                            title = "Коллекция пуста",
+                            subtitle = "Нажмите на значок закладки на любом фильме, чтобы сохранить его здесь."
                         )
+                    } else {
+                        LazyColumn(
+                            contentPadding = PaddingValues(
+                                start = 18.dp,
+                                end = 18.dp,
+                                top = 10.dp,
+                                bottom = 112.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(displayed, key = { it.id }) { movie ->
+                                SavedMinimalRow(
+                                    movie = movie,
+                                    downloadProgress = uiState.downloadProgress[movie.id],
+                                    onClick = { onMovieClick(movie.id) },
+                                    onPlay = { onPlayClick(movie.id) },
+                                    onDownloadOrRemove = {
+                                        if (movie.isDownloaded) onRemoveDownload(movie) else onDownloadMovie(movie)
+                                    },
+                                    onRemoveFavorite = { onToggleFavorite(movie.id) }
+                                )
+                            }
+                        }
                     }
                 }
-            }
-        } else {
-            if (uiState.downloadedMovies.isEmpty() && uiState.downloadProgress.isEmpty()) {
-                EmptyCollectionState(
-                    icon = Icons.Filled.CloudDownload,
-                    title = "Нет загруженных фильмов",
-                    subtitle = "Скачайте фильмы для просмотра без интернета. Их можно будет запустить в любое время в офлайн-режиме."
-                )
             } else {
-                val activeAndDownloaded = (uiState.downloadedMovies + uiState.allMovies.filter {
-                    uiState.downloadProgress.containsKey(it.id)
-                }).distinctBy { it.id }
+                if (uiState.downloadedMovies.isEmpty() && uiState.downloadProgress.isEmpty()) {
+                    EmptyMinimalState(
+                        icon = LucideIcons.Download,
+                        title = "Нет офлайн-загрузок",
+                        subtitle = "Скачивайте фильмы на карточке картины — они будут доступны без интернета."
+                    )
+                } else {
+                    val activeAndDownloaded = (uiState.downloadedMovies + uiState.allMovies.filter {
+                        uiState.downloadProgress.containsKey(it.id)
+                    }).distinctBy { it.id }
 
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(activeAndDownloaded, key = { "offline_${it.id}" }) { movie ->
-                        SavedMovieRowCard(
-                            movie = movie,
-                            downloadProgress = uiState.downloadProgress[movie.id],
-                            onClick = { onMovieClick(movie.id) },
-                            onPlay = { onPlayClick(movie.id) },
-                            onDownloadOrRemove = {
-                                if (movie.isDownloaded) onRemoveDownload(movie) else onDownloadMovie(movie)
-                            },
-                            onRemoveFavorite = { onToggleFavorite(movie.id) }
-                        )
+                    LazyColumn(
+                        contentPadding = PaddingValues(
+                            start = 18.dp,
+                            end = 18.dp,
+                            top = 10.dp,
+                            bottom = 112.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(activeAndDownloaded, key = { "offline_${it.id}" }) { movie ->
+                            SavedMinimalRow(
+                                movie = movie,
+                                downloadProgress = uiState.downloadProgress[movie.id],
+                                onClick = { onMovieClick(movie.id) },
+                                onPlay = { onPlayClick(movie.id) },
+                                onDownloadOrRemove = {
+                                    if (movie.isDownloaded) onRemoveDownload(movie) else onDownloadMovie(movie)
+                                },
+                                onRemoveFavorite = { onToggleFavorite(movie.id) }
+                            )
+                        }
                     }
                 }
             }
@@ -163,7 +179,7 @@ fun FavoritesScreen(
 }
 
 @Composable
-private fun SavedMovieRowCard(
+private fun SavedMinimalRow(
     movie: MovieEntity,
     downloadProgress: Float?,
     onClick: () -> Unit,
@@ -171,26 +187,27 @@ private fun SavedMovieRowCard(
     onDownloadOrRemove: () -> Unit,
     onRemoveFavorite: () -> Unit
 ) {
-    Card(
+    val palette = LocalKinoPalette.current
+    MinimalPanel(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            .bounceClick(scaleDown = 0.98f, onClick = onClick),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 MovieArtworkImage(
                     posterKey = movie.posterKey,
                     posterUrl = movie.posterUrl,
                     contentDescription = movie.title,
                     modifier = Modifier
-                        .width(74.dp)
-                        .height(104.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .width(66.dp)
+                        .height(94.dp)
+                        .clip(RoundedCornerShape(10.dp))
                 )
-                Spacer(modifier = Modifier.width(12.dp))
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -198,92 +215,88 @@ private fun SavedMovieRowCard(
                     Text(
                         text = movie.title,
                         style = MaterialTheme.typography.titleMedium,
+                        color = palette.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "${movie.releaseYear} · ${movie.genres.take(2).joinToString(", ")}",
+                        text = "${movie.releaseYear} · ${movie.durationMinutes} мин · ★ ${movie.rating}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = palette.textSecondary
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (movie.isFavorite) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    text = movie.userCollection,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
+                            Text(
+                                text = movie.userCollection,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = palette.textSecondary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(palette.surfaceElevated)
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
                         }
                         if (movie.isDownloaded) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer
-                            ) {
-                                Text(
-                                    text = "${String.format("%.1f", movie.downloadSizeMb)} МБ",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
+                            Text(
+                                text = "${String.format("%.1f", movie.downloadSizeMb)} МБ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = palette.onlineGreen,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(palette.surfaceElevated)
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
                         }
                     }
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    MinimalIconButton(
+                        icon = LucideIcons.Play,
+                        contentDescription = "Смотреть",
                         onClick = onPlay,
-                        modifier = Modifier.minimumInteractiveComponentSize()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = "Смотреть",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(
-                        onClick = onDownloadOrRemove,
-                        enabled = downloadProgress == null,
-                        modifier = Modifier.minimumInteractiveComponentSize()
-                    ) {
-                        Icon(
-                            imageVector = if (movie.isDownloaded) Icons.Filled.DownloadDone else Icons.Filled.CloudDownload,
-                            contentDescription = if (movie.isDownloaded) "Удалить офлайн" else "Скачать",
-                            tint = if (movie.isDownloaded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        containerColor = palette.ctaBackground,
+                        contentColor = palette.ctaContent,
+                        borderColor = palette.borderSubtle,
+                        size = 38.dp,
+                        iconSize = 15.dp
+                    )
+                    MinimalIconButton(
+                        icon = if (movie.isDownloaded) LucideIcons.CheckCircle else LucideIcons.Download,
+                        contentDescription = if (movie.isDownloaded) "Удалить офлайн" else "Скачать",
+                        onClick = { if (downloadProgress == null) onDownloadOrRemove() },
+                        contentColor = if (movie.isDownloaded) palette.onlineGreen else palette.textSecondary,
+                        size = 38.dp,
+                        iconSize = 17.dp
+                    )
                     if (movie.isFavorite) {
-                        IconButton(
+                        MinimalIconButton(
+                            icon = LucideIcons.Trash,
+                            contentDescription = "Убрать",
                             onClick = onRemoveFavorite,
-                            modifier = Modifier.minimumInteractiveComponentSize()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.DeleteOutline,
-                                contentDescription = "Убрать из избранного",
-                                tint = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
+                            contentColor = palette.accent,
+                            size = 38.dp,
+                            iconSize = 17.dp
+                        )
                     }
                 }
             }
 
             if (downloadProgress != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 LinearProgressIndicator(
                     progress = { downloadProgress },
-                    modifier = Modifier.fillMaxWidth()
+                    color = palette.accent,
+                    trackColor = palette.surfaceElevated,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Загрузка для офлайн-просмотра: ${(downloadProgress * 100).toInt()}%",
+                    text = "Загрузка: ${(downloadProgress * 100).toInt()}%",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = palette.textSecondary
                 )
             }
         }
@@ -291,34 +304,28 @@ private fun SavedMovieRowCard(
 }
 
 @Composable
-private fun EmptyCollectionState(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun EmptyMinimalState(
+    icon: ImageVector,
     title: String,
     subtitle: String
 ) {
+    val palette = LocalKinoPalette.current
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(56.dp)
+            tint = palette.textTertiary,
+            modifier = Modifier.size(40.dp)
         )
         Spacer(modifier = Modifier.height(14.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge
-        )
+        Text(text = title, style = MaterialTheme.typography.titleLarge, color = palette.textPrimary)
         Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = palette.textSecondary)
     }
 }
