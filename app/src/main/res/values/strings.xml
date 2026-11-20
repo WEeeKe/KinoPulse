@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">KinoPulse</string>
+    <string name="nav_home">Главная</string>
+    <string name="nav_search">Поиск</string>
+    <string name="nav_favorites">Избранное</string>
+    <string name="nav_chat">Киноклуб</string>
+    <string name="nav_settings">Профиль</string>
+    <string name="offline_mode_active">Офлайн-режим</string>
+    <string name="night_mode_toggle">Переключить ночной режим</string>
+    <string name="notifications_title">Уведомления о новинках</string>
+    <string name="notification_channel_name">Новинки кино</string>
+    <string name="notification_channel_desc">Оповещения о новых фильмах и премьерах в KinoPulse</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "KinoPulse",
+  "description": "Приложение для просмотра фильмов с офлайн-режимом, рекомендациями, избранным, синхронизацией между устройствами, уведомлениями и чатом.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
