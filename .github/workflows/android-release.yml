@@ -1,0 +1,123 @@
+name: Build & Release Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Тег релиза (например, v1.0.0)"
+        required: false
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build KinoPulse APK & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -n "$SDK_DIR" ] && [ -x "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
+
+      - name: Prepare debug keystore
+        run: |
+          if [ ! -f debug.keystore ]; then
+            if [ -f debug.keystore.base64 ]; then
+              base64 -d debug.keystore.base64 > debug.keystore
+            else
+              keytool -genkeypair -v \
+                -keystore debug.keystore \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
+          fi
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest --no-daemon
+
+      - name: Build Debug APK
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: Resolve version tag and rename APK
+        id: meta
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.release_tag }}" ]]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.0.0"
+          fi
+          APK_NAME="KinoPulse-${TAG}.apk"
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk "release-artifacts/${APK_NAME}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "apk_name=${APK_NAME}" >> "$GITHUB_OUTPUT"
+          echo "apk_path=release-artifacts/${APK_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KinoPulse-APK-${{ steps.meta.outputs.tag }}
+          path: ${{ steps.meta.outputs.apk_path }}
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          APK_PATH="${{ steps.meta.outputs.apk_path }}"
+          cat <<'EOF' > release-notes.md
+          ## 🎬 KinoPulse — Android APK
+
+          ### Что внутри релиза:
+          - **Видеоплеер Media3 ExoPlayer** с сохранением позиции и ночным фильтром затемнения.
+          - **Офлайн-режим и кеширование** (Room + Coil 150 МБ + OkHttp 50 МБ + скачивание фильмов на устройство).
+          - **Персональные рекомендации** на основе избранного, жанров и истории просмотров.
+          - **Поиск и фильтры** по жанрам, годам выпуска (1994–2026), сортировке и офлайн-доступности.
+          - **Ночной и AMOLED-режим**, **уведомления о новинках**, **чат киноклуба** и **перенос профиля по коду (`KP1:...`)**.
+
+          ### Как установить:
+          1. Скачайте файл **`.apk`** ниже в разделе **Assets**.
+          2. Откройте его на Android-устройстве (Android 7.0+) и подтвердите установку.
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK_PATH" --clobber
+            gh release edit "$TAG" --title "KinoPulse ${TAG}" --notes-file release-notes.md
+          else
+            gh release create "$TAG" "$APK_PATH" \
+              --target "${{ github.sha }}" \
+              --title "KinoPulse ${TAG}" \
+              --notes-file release-notes.md
+          fi
